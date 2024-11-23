@@ -1,0 +1,783 @@
+---
+title: Tax and Income
+author: Hiroki Hoshina
+date: 2024-11-21
+format: 
+  html:
+    toc: true
+    fig-width: 9
+    fig-height: 4.5
+    code-fold: true
+    code-summary: "Code"
+    code-copy: true
+    code-tools: true # must!
+    code-block-border-left: false
+    code-line-numbers: true
+    highlight-style: dracula
+    html-math-method: webtex
+    self-contained: true
+    df-print: paged
+    fontsize: 14pt
+    mainfont: "Source Han Sans"
+    monofont: "Fira Code"
+---
+
+```{r packages}
+#| message: false
+pacman::p_load(
+  cols4all, ggthemes, here, lubridate, ragg, readxl, tidyverse, tinytable,
+  rvest
+  )
+FONT <- c("HaranoAjiGothic-Regular")
+FONT_B <- c("HaranoAjiGothic-Bold")
+theme_set(    
+  ggthemes::theme_few(base_family = FONT, base_size = 12) +
+  theme(
+    plot.background = NULL,
+    plot.title = element_text(family = FONT_B),
+    plot.caption = element_text(hjust = 0))
+    )
+source(here("R/save_figure.R"))
+```
+
+## 控除
+
+### 給与所得控除
+
+https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/1410.htm
+
+令和2年分以降を使用。
+
+雇用されていなければ、給与所得控除は発生しないが、ここでは、自営業の人も同額程度の経費を要したものと仮定する。
+
+```{r deduct_income}
+## 給与所得控除額を、給与所得額earned incomeから算出する関数
+deduct_income <- function(income_earned) {
+  border1 <- 162.5
+  border2 <- 180
+  border3 <- 360
+  border4 <- 660
+  border5 <- 850
+  
+  if (income_earned <= border1) {
+    d <- 55
+  } else if (income_earned > border1 & income_earned <= border2) {
+    d <- income_earned * 0.4 - 10
+  } else if (income_earned > border2 & income_earned <= border3) {
+    d <- income_earned * 0.3 + 8
+  } else if (income_earned > border3 & income_earned <= border4) {
+    d <- income_earned * 0.2 + 44
+  } else if (income_earned > border4 & income_earned <= border5) {
+    d <- income_earned * 0.1 + 110
+  } else if (income_earned > border5) {
+    d <- 195
+  }
+  
+  d
+}
+```
+
+```{r}
+deduct_income(300)
+```
+
+
+### 基礎控除額
+
+### 所得税の基礎控除　完了
+
+```{r deduct_basic}
+deduct_basic <- function(income_earned) {
+  b1 <- 2400
+  b2 <- 2450
+  b3 <- 2500
+  
+  if (income_earned <= b1) {
+    48
+  } else if (income_earned > b1 & income_earned <= b2) {
+    32
+  } else if (income_earned > b2 & income_earned <= b3) {
+    16
+  } else {
+    0
+  }
+}
+```
+
+```{r}
+deduct_basic(300)
+```
+
+### 住民税の基礎控除　完了
+
+```{r deduct_basic_resid}
+deduct_basic_resid <- function(income_earned) {
+  b1 <- 2400
+  b2 <- 2450
+  b3 <- 2500
+  
+  if (income_earned <= b1) {
+    43
+  } else if (income_earned > b1 & income_earned <= b2) {
+    29
+  } else if (income_earned > b2 & income_earned <= b3) {
+    15
+  } else {
+    0
+  }
+}
+```
+
+## 課税所得額を算出する関数　完了
+
+- 自営業者の場合、売上をincome_earnedとし、そこから基礎控除と社会保険料控除（国保・国民年金）を差し引く
+- 被雇用者の場合、給与をincome_earnedとし、そこから、給与所得控除・基礎控除・社会保険料控除（国保・厚生年金）を差し引く
+
+- 基礎控除の額は、所得税の場合と住民税の場合とで異なる。
+- 所得税の場合は、最大で48万円。住民税の場合は43万円。
+
+```{r get_income_taxable}
+## tax引数は、所得税か住民税かの違い
+get_income_taxable <- function(income_earned, num, city_table, nat_or_emp, tax) {
+  ## 国民年金加入者 or 厚生年金加入者
+  if (nat_or_emp == "nat") {
+    pension <- calc_pension_national(income_earned)
+  } else if (nat_or_emp == "emp") {
+    pension <- calc_pension_emp(income_earned)
+  }
+  
+  ## 所得税か住民税かで基礎控除額が変わるため
+  if (tax == "resid") {
+    basic <- deduct_basic_resid(income_earned)
+  } else if (tax == "income") {
+    basic <- deduct_basic(income_earned)
+  }
+  
+  ## earned incomeから、控除額を差し引く = taxable income
+  ## 今回のモデルでは、入口はincome_earnedだけなので、
+  ## income_taxableが合計所得金額＝総所得金額等になる
+  income_taxable <- (
+    income_earned -
+      ## 基礎控除を差し引く
+      basic -
+      ## 社会保険料控除を差し引く
+      pension - 
+      calc_insurance(income_earned, num, city_table)
+  )
+  
+  ## 給与所得を得ている人の場合に、給与所得控除を適用する
+  if (nat_or_emp == "emp") {
+    income_taxable <- income_taxable - deduct_income(income_earned)
+  }
+
+    ## 課税所得額が負になることを防ぐ
+  if (income_taxable < 0) {
+    income_taxable <- 0
+  }
+  
+  ## 1,000円未満の端数金額を切り捨てた後の金額を返す
+  income_taxable <- floor(income_taxable * 1e4 / 1e3) * 1e3 / 1e4
+
+  income_taxable
+}
+```
+
+```{r}
+get_income_taxable(300, 1, saitama, nat_or_emp = "emp", "income") |> 
+calc_tax_income(1, saitama, "emp")
+```
+
+## 年金：国民年金　完了
+
+> 令和6年度（令和6年4月～令和7年3月まで）は月額16,980円です。
+
+前納や付加年金保険料はないものと仮定する。
+
+```{r calc_pension_national}
+calc_pension_national <- function(income_earned) {
+  p <- 16980
+  
+  ## 免除・猶予のロジック ------------------------------
+  # income <- earned_income - deduct_income(earned_income)
+  # deduc_soc <- calc_insurance(earned_income, num, city_table) #+ calc_pension_national(income_lastyear, num, city_table)
+  # if (income < 35 * num + 32) {
+  #   p <- 0
+  # } else if (income < 88 + deduc_soc) {
+  #   p <- p * 1/4
+  # } else if (income < 128 + deduc_soc) {
+  #   p <- p * 1/2
+  # } else if (income < 168 + deduc_soc) {
+  #   p <- p * 3/4
+  # }
+  
+  p / 1e4 * 12 ## 年間、万円単位に
+  
+}
+```
+
+```{r}
+calc_pension_national(300, 1, saitama)
+```
+
+
+## 年金：厚生年金　完了
+
+- [保険料額表（令和2年9月分～）（厚生年金保険と協会けんぽ管掌の健康保険）](https://www.nenkin.go.jp/service/kounen/hokenryo/ryogaku/ryogakuhyo/20200825.html)こ
+- https://www.nenkin.go.jp/service/kounen/hokenryo/hoshu/20150515-01.html
+
+> 厚生年金保険では、被保険者が受け取る給与（基本給のほか残業手当や通勤手当などを含めた税引き前の給与）を一定の幅で区分した報酬月額に当てはめて決定した標準報酬月額を、保険料や年金額の計算に用います。
+
+> 厚生年金保険料は、被保険者の標準報酬月額と標準賞与額に、それぞれ保険料率を乗じて計算します。
+> また、被保険者と事業主は、厚生年金保険料の半額をそれぞれ負担します。詳しくは保険料額表をご確認ください。
+
+- 毎月の保険料額 = 標準報酬月額　×　保険料率
+- 賞与の保険料額 = 標準賞与額　×　保険料率
+
+> 報酬月額は、通勤手当等を含めた報酬に加え、事業所が提供する宿舎費や食事代等の現物給与（全国現物給与価額一覧表）の額も含めて決定されます。
+
+```{r}
+## 標準報酬月額の表を取得する
+monthly_premiums <- read_excel(
+  here("data/R06ryogaku.xlsx"),
+  skip = 8
+  ) |> 
+  slice(1:32) |> 
+  select(-4) |> 
+  set_names(c("class", "monthly_sum", "min", "max", "total", "half"))
+```
+
+```{r calc_pension_emp}
+## 給与所得（万円単位）から、月々の厚生年金保険料の労働者負担額（年間）を返す
+calc_pension_emp <- function(income_earned, table = monthly_premiums) {
+  ## 標準報酬月額
+  income_earned <- income_earned / 12 * 1e4
+  
+  ## incomeの値が、minより大きくmaxより小さい行を選び出す
+  matching_row <- table |> 
+    filter(
+      (is.na(min) | income_earned >= min) &
+      (is.na(max) | income_earned < max)
+      )
+  
+  ## 労働者負担分のみを返す
+  if (nrow(matching_row) > 0) {
+    return(matching_row$half * 12 / 1e4)
+  } else {
+    return(NA)
+  }
+}
+```
+
+```{r}
+## 例
+calc_pension_emp(150, monthly_premiums)
+```
+
+## 国民健康保険　完了
+
+[厚生労働省「国民健康保険の保険料・保険税について」](https://www.mhlw.go.jp/stf/newpage_21517.html)
+
+国民健康保険保険料は、自治体ごとに定められており、一括の計算はできない。
+一例として、どこかの自治体のデータを使うしかない。
+
+ここでは、埼玉県さいたま市の例を用いる。
+`city_table`引数に、さいたま市の健康保険の料率テーブルを当てはめること。
+
+https://www.city.saitama.lg.jp/001/153/002/004/p010020.html
+
+```{r calc_insurance}
+## 引数の単位は万円。
+## 引数numは人数。ここでは1でOKか
+calc_insurance <- function(income_earned, num, city_table) {
+  
+  ## 課税標準所得額 (所得 - 住民税型基礎控除) をincomeとする
+  income <- income_earned - deduct_basic_resid(income_earned)
+  
+  t <- city_table # alias
+  
+  ## 給与が控除額を下回っている場合に、負の値になることを防ぐ
+  if (income < 0) {
+    income <- 0
+  } else {
+    income
+  }
+
+  ## 医療・後期高齢者・介護の各項目の額を算出する関数
+  calc_sub_premiums <- function(income, income_rate, eq, maximum) {
+    ## 所得割額
+    prem_income <- income * income_rate
+    ## 均等割額
+    prem_equal <- num * eq
+    
+    ## 軽減措置 ------------------------
+    ## 軽減措置の人数による金額の違いを反映するため
+    if (num >= 2) {
+      v <- 43 + 10 * (num - 1)
+    } else {
+      v <- 43
+    }
+    
+    ## 均等割の軽減措置のロジック
+    if (income <= v) {
+      prem_equal <- prem_equal * 0.3
+    } else if (income <= v + num * 29) {
+      prem_equal <- prem_equal * 0.5
+    } else if (income <= v + num * 53.5) {
+      prem_equal <- prem_equal * 0.8
+    }
+    
+    ## 保険料額を所得割・均等割の合計値として求める
+    total <- prem_income + prem_equal
+    
+    ## 賦課限度額との比較
+    if (total >= maximum) {
+      return(maximum)
+    } else {
+      return(total)
+    }
+  }
+  
+  medical <- calc_sub_premiums(income, t$med_income_rate, t$med_eq, t$med_max)
+  medical <- trunc(medical * 1e2) / 1e2 # 100円未満切り捨て
+  senior  <- calc_sub_premiums(income, t$sen_income_rate, t$sen_eq, t$sen_max)
+  senior  <- trunc(senior * 1e2) / 1e2
+  nursing <- calc_sub_premiums(income, t$nur_income_rate, t$nur_eq, t$nur_max)
+  nursing <- trunc(nursing * 1e2) / 1e2
+  
+  total <- medical + senior + nursing
+  #print(paste("Medical:", medical, "Senior:", senior, "Nursing:", nursing, "Total:", total))
+  total
+}
+```
+
+```{r}
+## さいたま市のcity table
+saitama <- tibble(
+  med_income_rate  = 0.0701,
+  med_eq = 3.5,
+  med_max  = 65,
+  
+  sen_income_rate = 0.026,
+  sen_eq = 1.22,
+  sen_max = 24,
+  
+  nur_income_rate = 0.0224,
+  nur_eq = 1.34,
+  nur_max = 17
+)
+```
+
+
+```{r}
+## 年収が300万円、一人世帯の場合
+calc_insurance(300, 1, saitama)
+```
+
+
+### Memo: 国民健康保険料・保険税の軽減について
+
+> 国民健康保険料（税）の額を算定する際、法令により定められた所得基準を下回る世帯については、被保険者応益割（均等割・平等割）額の７割、５割又は２割を減額する制度があります。
+
+![軽減措置](figure/国民健康保険料軽減.png)
+
+- 所得が、43万年以下（給与収入が98万円以下）であれば、7割軽減
+- 所得が、43 + 被保険者数 * 29万円以下（給与が197万円以下）であれば、5割削減
+- 所得が、43 + 被保険者数 * 53.5万円以下（給与が302万円以下）であれば、5割削減
+- ここで、43万円の部分は、世帯の給与・年金所得者が2人以上の場合は、43 + 10 * (所得者数 - 1) 万円になる
+
+## 所得税　完了
+
+所得税額 = `(taxable income - deduction) * tax rate`
+
+earned incomeから、課税される所得金額（1,000円未満の端数金額を切り捨てた後の金額）に対する所得税の金額を算出する関数を用意する。
+
+- 次を参照した：https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2260.htm
+- [財務省「所得税の税率構造」](https://www.mof.go.jp/tax_policy/summary/income/b02.htm)
+
+```{r calc_tax_income}
+## 引数のincomeは、万円単位のtaxable incomeである
+## numは、扶養家族人数
+calc_tax_income <- function(income_taxable, num) {
+  
+  ## 課税所得金額のボーダー
+  b1 <- 0.1
+  b2 <- 195
+  b3 <- 330
+  b4 <- 695
+  b5 <- 900
+  b6 <- 1800
+  b7 <- 4000
+  
+  if (income_taxable <= 0) {
+    result <- 0
+    return(result)
+  } else if (income_taxable >= b1 & income_taxable < b2) {
+    r <- 0.05
+    d <- 0
+  } else if (income_taxable >= b2 & income_taxable < b3) {
+    r <- 0.1
+    d <- 9.75
+  } else if (income_taxable >= b3 & income_taxable < b4) {
+    r <- 0.2
+    d <- 42.75
+  } else if (income_taxable >= b4 & income_taxable < b5) {
+    r <- 0.23
+    d <- 63.6
+  } else if (income_taxable >= b5 & income_taxable < b6) {
+    r <- 0.33
+    d <- 153.6
+  } else if (income_taxable >= b6 & income_taxable < b7) {
+    r <- 0.4
+    d <- 279.6
+  } else if (income_taxable >= b7) {
+    r <- 0.45
+    d <- 479.6
+  }
+  income_tax <- (income_taxable * r) - d
+  
+  ## 「所得税等」の額の計算
+  ## 定額減税
+  ## 本人分（３万円）と同一生計配偶者及び扶養親族分（１人につき３万円）の合計額
+  if (income_taxable <= 1805) {
+    income_tax <- income_tax - 3 * num
+  }
+  
+  ## 復興特別所得税は所得税額の2.1%
+  ## 結果は100円未満切り捨て
+  income_tax <- floor((income_tax + income_tax * 0.021) * 1e2) / 1e2
+  
+  ## 所得税額が負になっていたら、0とする
+  if (income_tax < 0) {
+    0
+  } else {
+    income_tax
+  }
+}
+```
+
+```{r}
+calc_insurance(300, 1, saitama) + calc_pension_emp(300)
+get_income_taxable(300, 1, saitama, "emp", "income") |> 
+  calc_tax_income(1)
+```
+
+## 住民税　完了
+
+市民税＋県民税を住民税と呼ぶ。
+
+前年の所得に応じた「所得割」と、一定の所得がある人が負担する「均等割」がある。
+
+- 所得割は、一律10％で課される。
+- 均等割は、5000円/人が課される。
+
+- [財務省「個人所得課税の税率等の推移（イメージ図）」](https://www.mof.go.jp/tax_policy/summary/income/b02.htm)
+
+住民税の算出方法は、次を参考にした: https://www.cr.mufg.jp/mycard/knowledge/23031/index.html
+
+```{r calc_tax_resident}
+calc_tax_resident <- function(income_taxable, tax_rate = 0.1, num) {
+
+  ## 所得割額を算出（税額控除はないものとする）
+  ## 0.1は標準税率で、自治体によって異なりうる
+  tax_for_income <- income_taxable * tax_rate
+  tax_for_income <- trunc(tax_for_income * 1e2) / 1e2 # 100円未満切り捨て
+  
+  ## 調整控除
+  if (income_taxable <= 200) {
+    ## 調整控除額は、今のところ、基礎控除の差を使っている
+    ## https://www.city.saitama.lg.jp/001/153/004/002/001/004/p013670.html
+    tax_for_income <- tax_for_income - 5 * 0.05
+  }
+
+  ## 均等割
+  eq <- 0.1 + 0.3
+  
+  ## 森林環境税
+  if ((income_taxable < 41.5 & num == 1) | (num >= 2 & income_taxable < 31.5 * num + 10 + 18.9)) {
+    forest <- 0
+  } else {
+    forest <- 0.1
+  }
+    
+  ## 非課税世帯の処理 ------------------
+  if ((num == 1 & income_taxable <= 45) | (num >= 2 & income_taxable <= 35 * num + 31)) {
+    ## 所得割・均等割が非課税
+    tax_for_income <- 0
+    eq <- 0
+  } else if ((num == 1 & income_taxable < 45) | (num >= 2 & income_taxable < 35 * num + 42)) {
+    ## 所得割が非課税
+    tax_for_income <- 0
+  }
+  
+  ## 均等割額＋森林環境税を加算
+  resident_tax <- tax_for_income + eq + forest
+  
+  ## 定額減税適用（2024年6月～2025年5月適用）
+  ## 本人分（1万円）と同一生計配偶者及び扶養親族分（1人につき1万円）の合計額
+  if (income_taxable <= 1805) {
+    resident_tax <- resident_tax - 1 * num
+  }
+
+  if (resident_tax < 0) {
+    return(0)
+  } else {
+    resident_tax
+  }
+}
+```
+
+```{r}
+get_income_taxable(300, 1, saitama, "emp", "resid") |> 
+  calc_tax_resident(0.1, 1, saitama, "emp")
+#calc_pension_emp(300, monthly_premiums) + calc_insurance(300, 1, saitama)
+```
+
+## 消費税
+
+earned incomeの何割を消費に当てると仮定するか？
+これは、税・社会保険料を除く全てを消費するものと仮定する。
+
+```{r}
+calc_vat <- function(income_earned, num = 1, city = saitama, nat_or_emp) {
+  ## earned incomeごとの税・社会保険料の合計値を得たい
+  tax_income <- get_income_taxable(income_earned, num, city, nat_or_emp, "income") |> 
+    calc_tax_income(num)
+  tax_resit <- get_income_taxable(income_earned, num, city, nat_or_emp, "resid") |> 
+    calc_tax_resident(tax_rate = 0.1, num)
+  insurance <- calc_insurance(income_earned, num, city)
+  pension_emp <- calc_pension_emp(income_earned, monthly_premiums)
+  pension_nat <- calc_pension_national(income_earned)
+  
+  total <- sum(tax_income, tax_resit, insurance)
+  
+  if (nat_or_emp == "nat") {
+    total <- sum(total, pension_nat)
+  } else if (nat_or_emp == "emp") {
+    total <- sum(total, pension_emp)
+  }
+  
+  tax_rate <- 0.1 # 消費税率を10％とする
+  consume <- income_earned - total
+  vat <- consume * tax_rate
+
+  if (vat < 0) {
+    vat <- 0
+  }
+  vat
+}
+```
+
+```{r}
+calc_vat(20, 1, saitama, "emp")
+```
+
+
+
+## 税額・保険料額を合計する
+
+```{r calc_tax_and_prem}
+calc_tax_and_prem <- function(income_earned, num, city_table, nat_or_emp) {
+  
+  print(paste("Earned income:", income_earned))
+  
+  ## 課税所得額
+  taxable_incometax <- get_income_taxable(income_earned, num, city_table, nat_or_emp, "income")
+  taxable_residtax <- get_income_taxable(income_earned, num, city_table, nat_or_emp, "resid")
+  
+  ## 年金
+  if (nat_or_emp == "nat") {
+    ## 国民年金
+    pension <- calc_pension_national(income_earned)
+    print(paste0("国民年金保険料: ", pension))
+  } else if (nat_or_emp == "emp") {
+    ## 厚生年金
+    pension <- calc_pension_emp(income_earned)
+    print(paste0("厚生年金保険料: ", pension))
+  }
+
+  ## 国民健康保険料
+  insurance <- calc_insurance(income_earned, num, city_table)
+  print(paste("国民健康保険料:", insurance))
+  
+  ## 住民税
+  resident <- taxable_residtax |> 
+    calc_tax_resident(tax_rate = 0.1, num)
+  print(paste0("住民税: ", resident))
+
+  ## 所得税
+  income_tax <- taxable_incometax |> 
+    calc_tax_income(num)
+  print(paste("所得税:", income_tax))
+  
+  ## 消費税
+  vat <- calc_vat(income_earned, num, city_table, nat_or_emp)
+  print(paste("消費税:", vat))
+  
+  ## 合計
+  total <- sum(insurance, pension, resident, income_tax, vat)
+  print(paste("税・社会保険料の合計:", total))
+}
+```
+
+```{r}
+calc_tax_and_prem(300, 1, saitama, "nat")
+```
+
+```{r}
+calc_tax_and_prem(200, 1, saitama, "emp")
+```
+
+```{r}
+calc_tax_and_prem(150, 1, saitama, "nat")
+```
+
+## グラフ作成
+
+```{r}
+get_income_data <- function(income_earned_vec, city, nat_or_emp) {
+  tibble(
+    income_earned = income_earned_vec,
+    taxable_incometax = map(
+      income_earned, 
+      \(x) get_income_taxable(x, 1, city, nat_or_emp, "income")
+      ),
+    taxable_residtax = map(
+      income_earned, 
+      \(x) get_income_taxable(x, 1, city, nat_or_emp, "resid")
+      )
+    ) |> 
+    mutate(across(where(is.list), \(x) list_simplify(x)))
+}
+```
+
+国民年金加入者の場合のデータ:
+
+```{r}
+data_nat <- get_income_data(1:500, saitama, "nat")
+```
+
+厚生年金加入者の場合のデータ:
+
+```{r make_income_emp}
+make_income_emp <- function(maximum, city = saitama) {
+  vec_1to105 <- seq(1, 105)
+  vec_106 <- seq(106, maximum)
+  before <- get_income_data(vec_1to105, city, "nat")
+  after <- get_income_data(vec_106, city, "emp")
+  
+  bind_rows(before, after)
+}
+
+data_emp <- make_income_emp(500)
+```
+
+税・社会保険料を計算したテーブルを作る。
+
+```{r get_result}
+get_result <- function(df, city_table = saitama, num = 1, nat_or_emp) {
+  result <- df |> 
+    mutate(
+      pension_nat = map(income_earned, \(x) calc_pension_national(x)),
+      pension_emp = map(income_earned, \(x) calc_pension_emp(x)),
+      insurance = map(income_earned, \(x) calc_insurance(x, num, city_table)),
+      income_tax = map(taxable_incometax, \(x) calc_tax_income(x, num)),
+      resident_tax = map(taxable_residtax, \(x) calc_tax_resident(x, 0.1, num)),
+      vat = map(income_earned, \(x) calc_vat(x, num, city_table, nat_or_emp))
+      ) |> 
+      mutate(across(where(is.list), \(x) list_simplify(x)))
+  
+  if (nat_or_emp == "emp") {
+    result <- result |> 
+      mutate(pension = case_when(
+        income_earned < 106 ~ pension_nat,
+        income_earned >= 106 ~ pension_emp
+        )
+      )
+  } else if (nat_or_emp == "nat") {
+    result <- result |> 
+      mutate(pension = pension_nat)
+  }
+  
+  vat_rate <- 0.1
+  
+  result |> 
+    select(income_earned, pension, insurance, income_tax, resident_tax) |> 
+    mutate(
+      vat = (income_earned - (pension + insurance + income_tax + resident_tax)) * vat_rate,
+      vat = case_when(vat < 0 ~ 0, .default = vat) # 消費税額が負になるのを防ぐ
+      ) |> 
+    pivot_longer(cols = -income_earned) |> 
+    mutate(name = fct_inorder(name)) 
+}
+```
+
+```{r}
+case_emp <- get_result(data_emp, saitama, 1, "emp")
+case_nat <- get_result(data_nat, saitama, 1, "nat")
+```
+
+図の作成
+
+```{r make_chart}
+make_chart <- function(df, income_earned_max) {
+  df |> 
+    filter(income_earned <= income_earned_max) |> 
+    ggplot(aes(income_earned, value, fill = name)) +
+    geom_area() +
+    geom_hline(yintercept = 0, linewidth = 0.2) +
+    cols4all::scale_fill_discrete_c4a_cat() +
+    labs(
+      title = "収入水準別の、税・保険料の額の変化",
+      x = "Earned income",
+      y = "税・保険料額"
+    )
+}
+```
+
+```{r}
+fig_saitama_nat <- case_nat |> 
+  make_chart(4e2) +
+  geom_vline(xintercept = 103, linewidth = 0.2) +
+  labs(
+    subtitle = "自営業者（国民年金加入者）を想定したケース.\n縦線は103万円"
+  )
+fig_saitama_nat
+```
+
+```{r}
+save_figure(here("figure/saitama_nat.png"), fig_saitama_nat)
+```
+
+```{r}
+#levels_emp <- c("pension_emp", "insurance", "income_tax", "resident_tax")
+fig_saitama_emp <- case_emp |> 
+  make_chart(400) +
+  geom_vline(xintercept = c(106)) +
+  labs(
+    subtitle = "被雇用者（厚生年金加入者）を想定したケース.\n106万円までは、国民年金に加入していると仮定.\n縦線は106万円."
+  )
+fig_saitama_emp
+```
+
+```{r}
+save_figure(here("figure/saitama_emp.png"), fig_saitama_emp)
+```
+
+## 表
+
+```{r}
+result_table <- case_saitama |> 
+  filter(income_earned %in% seq(100, 300, 50)) |> 
+  mutate(
+    income_earned,
+    Independent_worker_sum = round(pension_nat + insurance + income_tax + resident_tax, 1),
+    Employed_worker_sum = round(pension_emp + insurance + income_tax + resident_tax, 1)
+  ) |> 
+  tt()
+result_table
+```
+
+```{r}
+tinytable::save_tt(result_table, here("figure/result.html"), overwrite = TRUE)
+```
+
