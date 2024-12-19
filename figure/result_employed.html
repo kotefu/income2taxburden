@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>tinytable_qpm0nmm2hcyzuirudw7s</title>
+    <title>tinytable_pc4s3kuy6dckxv6uzddc</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   </head>
   <body>
@@ -12,8 +12,8 @@
 
     <script>
 
-      function styleCell_qpm0nmm2hcyzuirudw7s(i, j, css_id) {
-          var table = document.getElementById("tinytable_qpm0nmm2hcyzuirudw7s");
+      function styleCell_pc4s3kuy6dckxv6uzddc(i, j, css_id) {
+          var table = document.getElementById("tinytable_pc4s3kuy6dckxv6uzddc");
           var cell = table.rows[i]?.cells[j];  // Safe navigation to avoid errors
           if (cell) {
               console.log(`Styling cell at (${i}, ${j}) with class ${css_id}`);
@@ -23,7 +23,7 @@
           }
       }
       function insertSpanRow(i, colspan, content) {
-        var table = document.getElementById('tinytable_qpm0nmm2hcyzuirudw7s');
+        var table = document.getElementById('tinytable_pc4s3kuy6dckxv6uzddc');
         var newRow = table.insertRow(i);
         var newCell = newRow.insertCell(0);
         newCell.setAttribute("colspan", colspan);
@@ -31,8 +31,8 @@
         // this may be unsafe, but innerText does not interpret <br>
         newCell.innerHTML = content;
       }
-      function spanCell_qpm0nmm2hcyzuirudw7s(i, j, rowspan, colspan) {
-        var table = document.getElementById("tinytable_qpm0nmm2hcyzuirudw7s");
+      function spanCell_pc4s3kuy6dckxv6uzddc(i, j, rowspan, colspan) {
+        var table = document.getElementById("tinytable_pc4s3kuy6dckxv6uzddc");
         const targetRow = table.rows[i];
         const targetCell = targetRow.cells[j];
         for (let r = 0; r < rowspan; r++) {
@@ -62,14 +62,14 @@
       window.addEventListener('load', function () {
           var cellsToStyle = [
             // tinytable style arrays after
-          { positions: [ { i: 5, j: 0 }, { i: 5, j: 1 }, { i: 5, j: 2 }, { i: 5, j: 3 }, { i: 5, j: 4 }, { i: 5, j: 5 }, { i: 5, j: 6 }, { i: 5, j: 7 },  ], css_id: 'tinytable_css_myxjr84odibkg2fzz5pz',}, 
-          { positions: [ { i: 0, j: 0 }, { i: 0, j: 1 }, { i: 0, j: 2 }, { i: 0, j: 3 }, { i: 0, j: 4 }, { i: 0, j: 5 }, { i: 0, j: 6 }, { i: 0, j: 7 },  ], css_id: 'tinytable_css_9c477l51exu9ixzwl9nw',}, 
+          { positions: [ { i: 0, j: 0 }, { i: 0, j: 1 }, { i: 0, j: 2 }, { i: 0, j: 3 }, { i: 0, j: 4 }, { i: 0, j: 5 }, { i: 0, j: 6 },  ], css_id: 'tinytable_css_m72j7k8ia9b1vsq7qdtf',}, 
+          { positions: [ { i: 5, j: 0 }, { i: 5, j: 1 }, { i: 5, j: 2 }, { i: 5, j: 3 }, { i: 5, j: 4 }, { i: 5, j: 5 }, { i: 5, j: 6 },  ], css_id: 'tinytable_css_6kfl6q7gj6vgnz2jdezq',}, 
           ];
 
           // Loop over the arrays to style the cells
           cellsToStyle.forEach(function (group) {
               group.positions.forEach(function (cell) {
-                  styleCell_qpm0nmm2hcyzuirudw7s(cell.i, cell.j, group.css_id);
+                  styleCell_pc4s3kuy6dckxv6uzddc(cell.i, cell.j, group.css_id);
               });
           });
       });
@@ -77,75 +77,69 @@
 
     <style>
       /* tinytable css entries after */
-      .table td.tinytable_css_myxjr84odibkg2fzz5pz, .table th.tinytable_css_myxjr84odibkg2fzz5pz { border-bottom: solid #d3d8dc 0.1em; }
-      .table td.tinytable_css_9c477l51exu9ixzwl9nw, .table th.tinytable_css_9c477l51exu9ixzwl9nw { border-top: solid #d3d8dc 0.1em; border-bottom: solid #d3d8dc 0.05em; }
+      .table td.tinytable_css_m72j7k8ia9b1vsq7qdtf, .table th.tinytable_css_m72j7k8ia9b1vsq7qdtf { border-top: solid #d3d8dc 0.1em; border-bottom: solid #d3d8dc 0.05em; }
+      .table td.tinytable_css_6kfl6q7gj6vgnz2jdezq, .table th.tinytable_css_6kfl6q7gj6vgnz2jdezq { border-bottom: solid #d3d8dc 0.1em; }
     </style>
     <div class="container">
-      <table class="table table-borderless" id="tinytable_qpm0nmm2hcyzuirudw7s" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing='true'>
+      <table class="table table-borderless" id="tinytable_pc4s3kuy6dckxv6uzddc" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing='true'>
         <thead>
         
               <tr>
                 <th scope="col">income_earned</th>
-                <th scope="col">pension_nat</th>
-                <th scope="col">pension_emp</th>
+                <th scope="col">pension</th>
                 <th scope="col">insurance</th>
                 <th scope="col">income_tax</th>
                 <th scope="col">resident_tax</th>
-                <th scope="col">Independent_worker_sum</th>
-                <th scope="col">Employed_worker_sum</th>
+                <th scope="col">vat</th>
+                <th scope="col">Total</th>
               </tr>
         </thead>
         
         <tbody>
                 <tr>
                   <td>100</td>
-                  <td>20.376</td>
                   <td> 9.6624</td>
-                  <td> 2.04</td>
-                  <td>0.000</td>
-                  <td> 0.10</td>
-                  <td>22.5</td>
-                  <td>11.8</td>
+                  <td> 9.77</td>
+                  <td>0.00</td>
+                  <td>0.00</td>
+                  <td> 8.05676</td>
+                  <td>27.5</td>
                 </tr>
                 <tr>
                   <td>150</td>
-                  <td>20.376</td>
                   <td>13.8348</td>
-                  <td> 9.18</td>
-                  <td>0.000</td>
-                  <td> 2.73</td>
-                  <td>32.3</td>
-                  <td>25.7</td>
+                  <td>18.73</td>
+                  <td>0.00</td>
+                  <td>0.00</td>
+                  <td>11.74352</td>
+                  <td>44.3</td>
                 </tr>
                 <tr>
                   <td>200</td>
-                  <td>20.376</td>
                   <td>18.6660</td>
-                  <td>15.38</td>
-                  <td>1.800</td>
-                  <td> 5.82</td>
-                  <td>43.4</td>
-                  <td>41.7</td>
+                  <td>24.65</td>
+                  <td>0.00</td>
+                  <td>3.81</td>
+                  <td>15.28740</td>
+                  <td>62.4</td>
                 </tr>
                 <tr>
                   <td>250</td>
-                  <td>20.376</td>
                   <td>21.9600</td>
-                  <td>20.74</td>
-                  <td>4.790</td>
-                  <td> 8.77</td>
-                  <td>54.7</td>
-                  <td>56.3</td>
+                  <td>30.58</td>
+                  <td>0.32</td>
+                  <td>6.39</td>
+                  <td>19.07500</td>
+                  <td>78.3</td>
                 </tr>
                 <tr>
                   <td>300</td>
-                  <td>20.376</td>
                   <td>28.5480</td>
-                  <td>24.89</td>
-                  <td>7.915</td>
-                  <td>11.87</td>
-                  <td>65.1</td>
-                  <td>73.2</td>
+                  <td>36.50</td>
+                  <td>1.47</td>
+                  <td>8.64</td>
+                  <td>22.48420</td>
+                  <td>97.6</td>
                 </tr>
         </tbody>
       </table>
