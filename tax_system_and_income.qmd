@@ -28,17 +28,69 @@ pacman::p_load(
   cols4all, ggthemes, ggrepel, here, latex2exp, lubridate, ragg, readxl, tidyverse, tinytable,
   rvest
   )
-FONT <- c("HaranoAjiGothic-Regular")
-FONT_B <- c("HaranoAjiGothic-Bold")
-theme_set(    
+FONT <- c("Source Han Sans")
+#FONT_B <- c("HaranoAjiGothic-Bold")
+theme_set(
   ggthemes::theme_few(base_family = FONT, base_size = 12) +
   theme(
     plot.background = NULL,
-    plot.title = element_text(family = FONT_B),
+    plot.title = element_text(family = FONT, face = "bold"),
     plot.caption = element_text(hjust = 0))
     )
 source(here("R/save_figure.R"))
 ```
+
+### 基礎控除額
+
+国民民主党の案では、基礎控除額を引き上げて、48万円から123万円までの、+75万円とする方針
+
+```{r}
+#koku <- 75
+koku <- 0
+```
+
+```{r deduct_basic}
+deduct_basic <- function(income_earned, resid_or_income) {
+  b1 <- 2400
+  b2 <- 2450
+  b3 <- 2500
+  
+  ## 所得税・住民税に応じて、引数で変えられるようにした
+  if (resid_or_income == "income") {
+    
+    ## 所得税の控除額を返す場合
+    ## 国民民主党の案を反映できるよう、koku項を追加
+    if (income_earned <= b1) {
+      48 + koku
+    } else if (income_earned > b1 & income_earned <= b2) {
+      32 + koku
+    } else if (income_earned > b2 & income_earned <= b3) {
+      16 + koku
+    } else {
+      0
+    }
+    
+  } else if (resid_or_income == "resid") {
+    
+    ## 住民税の控除額を返す場合
+    if (income_earned <= b1) {
+      43 + koku
+    } else if (income_earned > b1 & income_earned <= b2) {
+      29 + koku
+    } else if (income_earned > b2 & income_earned <= b3) {
+      15 + koku
+    } else {
+      0
+    }
+    
+  }
+}
+```
+
+```{r}
+deduct_basic(200, "resid")
+```
+
 
 ## 社会保険料
 
@@ -305,56 +357,6 @@ deduct_income(300)
 ```
 
 
-### 基礎控除額
-
-国民民主党の案では、基礎控除額を引き上げて、48万円から123万円までの、+75万円とする方針
-
-```{r}
-koku <- 75
-#koku <- 0
-```
-
-```{r deduct_basic}
-deduct_basic <- function(income_earned, resid_or_income) {
-  b1 <- 2400
-  b2 <- 2450
-  b3 <- 2500
-  
-  ## 所得税・住民税に応じて、引数で変えられるようにした
-  if (resid_or_income == "income") {
-    
-    ## 所得税の控除額を返す場合
-    ## 国民民主党の案を反映できるよう、koku項を追加
-    if (income_earned <= b1) {
-      48 + koku
-    } else if (income_earned > b1 & income_earned <= b2) {
-      32 + koku
-    } else if (income_earned > b2 & income_earned <= b3) {
-      16 + koku
-    } else {
-      0
-    }
-    
-  } else if (resid_or_income == "resid") {
-    
-    ## 住民税の控除額を返す場合
-    if (income_earned <= b1) {
-      43 + koku
-    } else if (income_earned > b1 & income_earned <= b2) {
-      29 + koku
-    } else if (income_earned > b2 & income_earned <= b3) {
-      15 + koku
-    } else {
-      0
-    }
-    
-  }
-}
-```
-
-```{r}
-deduct_basic(200, "resid")
-```
 
 ### 社会保険料控除
 
@@ -682,19 +684,40 @@ calc_tax_and_prem <- function(income_earned, num, city_table, is_salary, nat_or_
   ## 合計
   total <- sum(insurance, pension, resident, income_tax, vat)
   print(paste("税・社会保険料の合計:", total))
+  
+  ## 結果のtibble
+  tibble(
+    `年収` = income_earned,
+    `年金` = pension,
+    `健康保険` = insurance,
+    `住民税` = resident,
+    `所得税` = income_tax,
+    `消費税` = vat,
+    `合計` = total
+  )
 }
 ```
 
 ```{r}
-calc_tax_and_prem(200, 1, saitama, FALSE, "nat")
+result_gig <- calc_tax_and_prem(200, 1, saitama, FALSE, "nat")
+result_gig
+```
+
+200万円の自営業者の税・社会保険料負担のグラフ:
+
+```{r}
+source("R/figure_gig.R")
+result <- make_fig_gig(result_gig)
+result
+```
+
+
+```{r}
+calc_tax_and_prem(200, 1, saitama, TRUE, "emp")
 ```
 
 ```{r}
-calc_tax_and_prem(200, 1, saitama, "emp")
-```
-
-```{r}
-calc_tax_and_prem(150, 1, saitama, "nat")
+calc_tax_and_prem(150, 1, saitama, TRUE, "nat")
 ```
 
 ## グラフ作成
