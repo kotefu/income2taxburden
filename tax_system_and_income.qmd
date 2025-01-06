@@ -29,7 +29,6 @@ pacman::p_load(
   rvest
   )
 FONT <- c("Source Han Sans")
-#FONT_B <- c("HaranoAjiGothic-Bold")
 theme_set(
   ggthemes::theme_few(base_family = FONT, base_size = 12) +
   theme(
@@ -700,7 +699,13 @@ calc_tax_and_prem <- function(income_earned, num, city_table, is_salary, nat_or_
 
 ```{r}
 result_gig <- calc_tax_and_prem(200, 1, saitama, FALSE, "nat")
-result_gig
+```
+
+```{r}
+result_gig_write <- result_gig |> pivot_longer(cols = everything()) |> 
+  mutate(across(where(is_double), \(x) round(x, 4)))
+result_gig_write
+write_excel_csv(result_gig_write, here("data/gig_200.csv"))
 ```
 
 200万円の自営業者の税・社会保険料負担のグラフ:

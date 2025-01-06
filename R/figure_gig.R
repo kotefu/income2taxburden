@@ -14,6 +14,9 @@ make_fig_gig <- function(df) {
     #所得税 = "#7ccba2"
   )
   
+  ## x軸のラベル
+  x_lab <- c(seq(0, 60, 20), round(df$`合計`, 1))
+  
   fig_result_gig <- df |> 
     select(-`合計`) |>
     transmute(
@@ -31,12 +34,12 @@ make_fig_gig <- function(df) {
     geom_text(
       aes(
         x = cumsum,
-        label = paste0(name, "\n", round(value, 1))
+        label = paste0(name, "\n", round(value, 1), "万円")
       ),
       colour = "white",
       fontface = "bold",
       family = FONT,
-      size = 6
+      size = 5.5
     ) +
     theme(
       legend.position = "none",
@@ -51,6 +54,10 @@ make_fig_gig <- function(df) {
     scale_fill_manual(
       values = my_color
     ) +
+    scale_x_continuous(
+      breaks = x_lab,
+      labels = x_lab
+      ) +
     labs(
       x = "負担額 (万円)",
       y = NULL
@@ -64,5 +71,7 @@ make_fig_gig <- function(df) {
     dpi = 1200
   )
   
-  fig_result_gig
+  return(fig_result_gig)
 }
+
+make_fig_gig(result_gig)
