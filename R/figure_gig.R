@@ -62,16 +62,19 @@ make_fig_gig <- function(df) {
       x = "負担額 (万円)",
       y = NULL
     )
-
-  save_figure(
-    here("figure/gig_200.png"),
-    fig_result_gig,
-    width = 180,
-    height = 60,
-    dpi = 1200
-  )
   
   return(fig_result_gig)
 }
 
-make_fig_gig(result_gig)
+save_fig_gig <- function(filename, plot) {
+  ggsave(
+    filename = filename,
+    path = here("figure"),
+    plot = plot,
+    device = ragg::agg_png(),
+    width = 180,
+    height = 60,
+    units = "mm",
+    dpi = 1200
+  )
+}
