@@ -71,9 +71,16 @@ saitama <- tibble(
 )
 ```
 
+具体的な人物のオブジェクト:
+
 ```{r}
 p1 <- person(500, saitama, "埼玉", TRUE, "nat", 1)
 ```
+
+```{r gig}
+gig <- person(200, saitama, "埼玉", FALSE, "nat", 1)
+```
+
 
 ### 基礎控除額
 
@@ -696,7 +703,6 @@ calc_tax_and_prem <- function(person) {
 ```
 
 ```{r}
-gig <- person(200, saitama, "埼玉", TRUE, "emp", 1)
 result_gig <- calc_tax_and_prem(gig)
 result_gig
 ```
