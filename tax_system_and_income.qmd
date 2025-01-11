@@ -56,19 +56,8 @@ person <- function(income_earned, city, pref, is_salary, pension, num = 1) {
 
 ```{r}
 ## さいたま市のcity table
-saitama <- tibble(
-  med_income_rate = 0.0701,
-  med_eq = 3.5,
-  med_max  = 65,
-
-  sen_income_rate = 0.026,
-  sen_eq = 1.22,
-  sen_max = 24,
-
-  nur_income_rate = 0.0224,
-  nur_eq = 1.34,
-  nur_max = 17
-)
+source(here("R/city_table/city_table_saitama.R"))
+saitama
 ```
 
 具体的な人物のオブジェクト:
