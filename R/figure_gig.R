@@ -14,11 +14,17 @@ make_fig_gig <- function(df) {
     #所得税 = "#7ccba2"
   )
   
-  ## x軸のラベル
-  x_lab <- c(seq(0, 60, 20), round(df$`合計`, 1))
+  ## フォントサイズ
+  fsize <- 5
   
-  fig_result_gig <- df |> 
-    select(-`合計`) |>
+  ## グラフの右側をどの値の位置まで表示するか
+  xmax <- sum(df$value)
+  
+  ## x軸のラベル
+  x_lab <- c(seq(0, 60, 20), round(df$`負担合計`, 1))
+  
+  ## データフレームの前処理
+  d <- df |> 
     transmute(
       `年収`,
       `健康保険料` = `健康保険`,
@@ -26,22 +32,21 @@ make_fig_gig <- function(df) {
       `消費税`,
       `住民税 +\n所得税` = `住民税` + `所得税`
     ) |> 
-    pivot_longer(-`年収`) |> 
-    arrange(desc(value)) |> 
-    mutate(cumsum = cumsum(value) - value / 2) |> 
-    ggplot(aes(value, "", fill = reorder(name, value))) +
-    geom_col() +
-    geom_text(
-      aes(
-        x = cumsum,
-        label = paste0(name, "\n", round(value, 1), "万円")
-      ),
-      colour = "white",
-      fontface = "bold",
-      family = FONT,
-      size = 5.5
+    pivot_longer(-`年収`, names_transform = list(name = as.factor)) |> 
+    mutate(
+      cumsum = cumsum(value) - value / 2, # グラフ内の要素名のx座標
+      name = factor(name, levels = barorder),
+      ratio = (value / df$`年収`) * 100 # 全体に占める割合
+    )
+
+  ## ggplot部分
+  fig <- d |>
+    ggplot(aes(value, "", fill = name)) +
+    geom_col(position = position_stack(reverse = TRUE)) + # 積み上げを逆順に
+    scale_fill_manual(
+      values = my_color
     ) +
-    theme(
+  theme(
       legend.position = "none",
       ## 枠線を消し、x軸のmajor gridのみを引く
       panel.border = element_blank(),
@@ -51,29 +56,71 @@ make_fig_gig <- function(df) {
       ),
       axis.ticks = element_line(linewidth = 0)
     ) +
-    scale_fill_manual(
-      values = my_color
-    ) +
-    scale_x_continuous(
-      breaks = x_lab,
-      labels = x_lab
-      ) +
     labs(
       x = "負担額 (万円)",
       y = NULL
+    ) +
+    scale_x_continuous(
+      breaks = x_lab,
+      labels = x_lab,
+      limits = c(0, 78)
     )
   
-  return(fig_result_gig)
+  ## ラベルが小さすぎる時の処理
+  d_mini <- d |> 
+    filter(value > 10)
+  
+  fig <- fig +
+    geom_text(
+      data = d_mini,
+      aes(
+        x = cumsum,
+        label = paste0(name, "\n", round(value, 1), "万円", "\n(", round(ratio, 1), "%)")
+      ),
+      colour = "white",
+      fontface = "bold",
+      family = FONT,
+      size = fsize
+    )
+  
+  if (any(d$value < 10)) {
+    fig <- fig +
+      geom_text(
+        data = filter(d, value < 10),
+        aes(
+          x = sum(d_mini$value) + 0.5,
+          label = paste0(name, "\n", round(value, 1), "万円", "\n(", round(ratio, 1), "%)")
+        ),
+        hjust = 0, 
+        colour = "grey10",
+        fontface = "bold",
+        family = FONT,
+        size = fsize
+      )
+  
+  fig <- fig +
+    scale_x_continuous(
+      breaks = x_lab,
+      labels = x_lab,
+      #limits = c(0, sum(d$value) * 1.1)
+      limits = c(0, 78)
+    )
+  }
+  
+  return(fig)
+  
+  ## personオブジェクトをbind_rowして、複数の積み上げ棒グラフとしたほうがいいのかもしれない。ただ、その場合に、被用者の住民税・所得税のような小さい部分だけ表示しないような処理が簡単にできるのか不明。
+  ## 普通に色分けだけのグラフなら楽なのだが・・・
 }
 
-save_fig_gig <- function(filename, plot) {
+save_fig_gig <- function(filename, plot, width = 180, height = 70) {
   ggsave(
     filename = filename,
     path = here("figure"),
     plot = plot,
     device = ragg::agg_png(),
-    width = 180,
-    height = 60,
+    width = width,
+    height = height,
     units = "mm",
     dpi = 1200
   )

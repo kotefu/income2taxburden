@@ -22,13 +22,15 @@ format:
     monofont: "Fira Code"
 ---
 
+
 ```{r packages}
 #| message: false
 pacman::p_load(
-  cols4all, ggthemes, ggrepel, here, latex2exp, lubridate, ragg, readxl, tidyverse, tinytable,
+  cols4all, ggthemes, ggrepel, here, latex2exp, lubridate, patchwork, ragg, readxl, tidyverse, tinytable,
   rvest
   )
 FONT <- c("Source Han Sans")
+#FONT <- c("Source Han Serif")
 theme_set(
   ggthemes::theme_few(base_family = FONT, base_size = 12) +
   theme(
@@ -63,7 +65,7 @@ saitama
 具体的な人物のオブジェクト:
 
 ```{r}
-p1 <- person(500, saitama, "埼玉", TRUE, "nat", 1)
+p1 <- person(200, saitama, "埼玉", TRUE, "emp", 1)
 ```
 
 ```{r gig}
@@ -140,9 +142,9 @@ calc_pension <- function(person) {
         (is.na(min) | income_earned >= min) &
         (is.na(max) | income_earned < max)
         )
-    ## 労使折半前の金額を返す
     if (nrow(matching_row) > 0) {
-      return(matching_row$half * 12 / 1e4)
+      ## 労使折半ならhalf, 全額ならtotal
+      return(matching_row$total * 12 / 1e4)
     } else {
       return(NA)
     }
@@ -287,7 +289,7 @@ calc_kokuho(p1)
 
 `R/kyokai_kenpo.R`で元データの加工を行った。
 
-```{r calc_kenpo}
+```{r}
 kenpo_table <- read_csv(
     here("data/kyokai_kenpo/premiums.csv"),
     show_col_types = FALSE
@@ -691,6 +693,8 @@ calc_tax_and_prem <- function(person) {
 }
 ```
 
+### 200万円の自営業者の場合
+
 ```{r}
 result_gig <- calc_tax_and_prem(gig)
 result_gig
@@ -699,17 +703,36 @@ result_gig
 ```{r}
 result_gig_write <- result_gig |> pivot_longer(cols = everything()) |> 
   mutate(across(where(is_double), \(x) round(x, 4)))
-result_gig_write
 write_excel_csv(result_gig_write, here("data/gig_200.csv"))
 ```
 
-200万円の自営業者の税・社会保険料負担のグラフ:
-
 ```{r}
 source("R/figure_gig.R")
-fig_gig <- make_fig_gig(result_gig)
+(fig_gig <- make_fig_gig(result_gig) +
+  labs(subtitle = "自営業者"))
 save_fig_gig("gig_200.png", fig_gig)
 ```
+
+### 年収200万円の給与所得者の場合
+
+```{r}
+salary200 <- person(200, saitama, "埼玉", TRUE, "emp", 1)
+source("R/figure_gig.R")
+result_salary200 <- calc_tax_and_prem(salary200)
+(fig_salary200 <- make_fig_gig(result_salary200) +
+    labs(subtitle = "被用者"))
+save_fig_gig("salary200.png", fig_salary200)
+```
+
+```{r}
+(gig_salary <- fig_gig / fig_salary200 + 
+   patchwork::plot_annotation(
+     caption = "（備考）括弧内は、年収に占める各費目の割合である。"
+   ))
+save_fig_gig("gig_salary.png", gig_salary, width = 200, height = 140)
+```
+
+
 
 ## グラフ作成
 
