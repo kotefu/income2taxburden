@@ -18,7 +18,7 @@ make_fig_gig <- function(df) {
   fsize <- 5
   
   ## グラフの右側をどの値の位置まで表示するか
-  xmax <- sum(df$value)
+  xmax <- sum(df$`負担合計`)
   
   ## x軸のラベル
   x_lab <- c(seq(0, 60, 20), round(df$`負担合計`, 1))
@@ -35,7 +35,10 @@ make_fig_gig <- function(df) {
     pivot_longer(-`年収`, names_transform = list(name = as.factor)) |> 
     mutate(
       cumsum = cumsum(value) - value / 2, # グラフ内の要素名のx座標
-      name = factor(name, levels = barorder),
+      name = factor(
+        name,
+        levels = names(my_color) # 積み上げバーの並び順を制御
+        ),
       ratio = (value / df$`年収`) * 100 # 全体に占める割合
     )
 
@@ -63,7 +66,7 @@ make_fig_gig <- function(df) {
     scale_x_continuous(
       breaks = x_lab,
       labels = x_lab,
-      limits = c(0, 78)
+      limits = c(0, xmax * 1.1)
     )
   
   ## ラベルが小さすぎる時の処理
@@ -88,7 +91,7 @@ make_fig_gig <- function(df) {
       geom_text(
         data = filter(d, value < 10),
         aes(
-          x = sum(d_mini$value) + 0.5,
+          x = sum(d_mini$value) + 0.8,
           label = paste0(name, "\n", round(value, 1), "万円", "\n(", round(ratio, 1), "%)")
         ),
         hjust = 0, 
@@ -103,7 +106,7 @@ make_fig_gig <- function(df) {
       breaks = x_lab,
       labels = x_lab,
       #limits = c(0, sum(d$value) * 1.1)
-      limits = c(0, 78)
+      limits = c(0, xmax * 1.1)
     )
   }
   

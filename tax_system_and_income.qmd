@@ -7,7 +7,7 @@ format:
     toc: true
     fig-width: 9
     fig-height: 4.5
-    code-fold: true
+    code-fold: false
     code-summary: "Code"
     code-copy: true
     code-tools: true # must!
@@ -25,6 +25,7 @@ format:
 
 ```{r packages}
 #| message: false
+#| code-fold: true
 pacman::p_load(
   cols4all, ggthemes, ggrepel, here, latex2exp, lubridate, patchwork, ragg, readxl, tidyverse, tinytable,
   rvest
@@ -41,17 +42,20 @@ theme_set(
 source(here("R/save_figure.R"))
 ```
 
-加入者を表すオブジェクト
+## 加入者を表すオブジェクト
+
+加入者を表したオブジェクトを作成し、そのオブジェクトを、控除や税額を計算する関数の引数に取るという形で、関数を作成する。加入者を表したオブジェクト`person`は、収入や、被用者かどうかといった属性を持った構造体である。このpersonオブジェクトを、論文で見たい人物ごとに作成し、属性別の税額・社会保険料負担額を計算する。
 
 ```{r person}
-person <- function(income_earned, city, pref, is_salary, pension, num = 1) {
+person <- function(income_earned, city, pref, is_salary, is_blue, pension, num = 1) {
   tibble::tibble(
-    income_earned = income_earned,
+    income_earned = income_earned, # 収入額
     city = city, # 健康保険の医療・後期高齢者・介護料率表を載せたtibbleをとる
-    pref = pref, # 漢字で取る
-    is_salary = is_salary,
-    pension = pension,
-    num = num
+    pref = pref, # 都道府県名を漢字で取る
+    is_salary = is_salary, # 雇用されているか否か
+    is_blue_tax = is_blue,
+    pension = pension, # 国民年金か、厚生年金か
+    num = num # 扶養している人の数
   )
 }
 ```
@@ -59,21 +63,22 @@ person <- function(income_earned, city, pref, is_salary, pension, num = 1) {
 ```{r}
 ## さいたま市のcity table
 source(here("R/city_table/city_table_saitama.R"))
-saitama
 ```
 
 具体的な人物のオブジェクト:
 
 ```{r}
-p1 <- person(200, saitama, "埼玉", TRUE, "emp", 1)
+## 被用者のモデルケース
+(psn_employed <- person(200, saitama, "埼玉", TRUE, FALSE, "emp", 1))
 ```
 
-```{r gig}
-gig <- person(200, saitama, "埼玉", FALSE, "nat", 1)
+```{r psn_gig}
+## 自営業者のモデルケース
+(psn_gig <- person(200, saitama, "埼玉", FALSE, TRUE, "nat", 1))
 ```
 
 
-### 基礎控除額
+## 基礎控除額
 
 国民民主党の案では、基礎控除額を引き上げて、48万円から123万円までの、+75万円とする方針
 
@@ -84,10 +89,10 @@ source(here("R/deduct_basic.R"))
 例：収入が200万円の場合の、所得税の基礎控除
 
 ```{r}
-deduct_basic(p1)
+deduct_basic(psn_employed)
 ```
 
-### 給与所得控除
+## 給与所得控除
 
 https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/1410.htm
 
@@ -101,7 +106,7 @@ source(here("R/deduct_income.R"))
 ```
 
 ```{r}
-deduct_income(p1)
+deduct_income(psn_employed)
 ```
 
 ## 社会保険料
@@ -153,7 +158,7 @@ calc_pension <- function(person) {
 ```
 
 ```{r}
-calc_pension(p1)
+calc_pension(psn_employed)
 ```
 
 
@@ -262,7 +267,7 @@ calc_kokuho <- function(person) {
 ```{r}
 ## 年収が430万円、一人世帯の場合
 ## このとき、課税所得が300万円になる
-calc_kokuho(p1)
+calc_kokuho(psn_employed)
 ```
 
 
@@ -310,18 +315,41 @@ calc_kenpo <- function(person) {
       (is.na(Upper) | Upper > income_month * unit),
       Pref == pref
     ) |> 
-    select(`保険料_介護保険2号該当_折半額`) # 全額ではなく折半額とする
+    select(`保険料_介護保険2号該当_全額`) # 全額とする
+    # select(`保険料_介護保険2号該当_折半額`) # 全額ではなく折半額とする
   
   as.double(data) * 12 / unit # 年間の合計額、万円単位に
 }
 ```
 
 ```{r}
-calc_kenpo(p1)
+calc_kenpo(psn_employed)
 ```
 
 
 ## 控除
+
+### 青色申告控除
+
+国税庁「[青色申告特別控除](https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2072.htm)」
+
+所得税の算出に際して、不動産所得あるいは事業所得を営んでいる者のうち、一定の条件を満たした者は、最大で65万円の所得控除を受けることができる。
+
+```{r}
+deduct_blue_tax_ret <- function(person) {
+  if (person$is_blue_tax == TRUE) {
+    d <- 65
+  } else {
+    d <- 0
+  }
+  
+  return(d)
+}
+```
+
+```{r}
+deduct_blue_tax_ret(psn_gig)
+```
 
 ### 社会保険料控除
 
@@ -354,13 +382,13 @@ deduct_insur <- function(person) {
 例：
 
 ```{r}
-deduct_insur(p1)
+deduct_insur(psn_employed)
 ```
 
 ## 課税所得額を算出する関数　完了
 
-- 自営業者の場合、売上をincome_earnedとし、そこから基礎控除と社会保険料控除（国保・国民年金）を差し引く
-- 被雇用者の場合、給与をincome_earnedとし、そこから、給与所得控除・基礎控除・社会保険料控除（国保・厚生年金）を差し引く
+- 自営業者の場合、売上をincome_earnedとし、そこから基礎控除、青色申告控除、社会保険料控除（国保・国民年金）を差し引く
+- 被雇用者の場合、給与をincome_earnedとし、そこから、給与所得控除、基礎控除、社会保険料控除（国保・厚生年金）を差し引く
 
 - 基礎控除の額は、所得税の場合と住民税の場合とで異なる。
 - 所得税の場合は、最大で48万円。住民税の場合は43万円。
@@ -374,7 +402,7 @@ get_taxable <- function(person) {
   ## earned incomeから、控除額を差し引く = taxable income --------------
   ## 今回のモデルでは、入口はincome_earnedだけなので、
   ## income_taxableが合計所得金額＝総所得金額等になる
-  income_taxable <- person$income_earned - deduct_basic(person) - deduct_insur(person)
+  income_taxable <- person$income_earned - deduct_basic(person) - deduct_insur(person) - deduct_blue_tax_ret(person)
 
   ## 給与所得を得ている人の場合に、給与所得控除を適用する --------------
   if (person$is_salary == TRUE) {
@@ -398,7 +426,7 @@ get_taxable <- function(person) {
 例：さいたま市在住の被用者の場合の、所得税の課税所得
 
 ```{r}
-get_taxable(gig)
+get_taxable(psn_gig)
 ```
 
 ## 所得税　完了
@@ -478,7 +506,7 @@ calc_tax_income <- function(person) {
 例：さいたま市在住の被用者の場合の所得税額
 
 ```{r}
-calc_tax_income(p1)
+calc_tax_income(psn_employed)
 ```
 
 ## 住民税　完了
@@ -571,7 +599,7 @@ calc_tax_resident <- function(person) {
 例：さいたま市在住の、年収350万円の被用者の住民税額
 
 ```{r}
-calc_tax_resident(gig)
+calc_tax_resident(psn_gig)
 #calc_pension_emp(300, monthly_premiums) + calc_kokuho(300, 1, saitama)
 ```
 
@@ -579,7 +607,7 @@ calc_tax_resident(gig)
 
 ```{r}
 ## たくさんのpersonオブジェクト
-persons <- p1 |> 
+persons <- psn_employed |> 
   mutate(income_earned = list(seq(100, 500, 20))) |> 
   unnest(income_earned)
 ```
@@ -626,11 +654,11 @@ calc_vat <- function(person) {
 ```
 
 ```{r}
-calc_vat(p1)
+calc_vat(psn_employed)
 ```
 
 
-## 税額・保険料額を合計する
+## 図：税額・保険料額を合計する
 
 ```{r calc_tax_and_prem}
 calc_tax_and_prem <- function(person) {
@@ -693,498 +721,56 @@ calc_tax_and_prem <- function(person) {
 }
 ```
 
-### 200万円の自営業者の場合
+### 自営業者の場合
+
+- 埼玉県さいたま市在住の40歳単身世帯をモデルとした。
+- 年金は国民年金に、健康保険は国民健康保険に加入しているものとする。
+- 所得税額の算出に際しては、定額減税は加えていない。
+- 消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。
 
 ```{r}
-result_gig <- calc_tax_and_prem(gig)
+result_gig <- calc_tax_and_prem(psn_gig)
 result_gig
 ```
 
 ```{r}
 result_gig_write <- result_gig |> pivot_longer(cols = everything()) |> 
   mutate(across(where(is_double), \(x) round(x, 4)))
-write_excel_csv(result_gig_write, here("data/gig_200.csv"))
+write_excel_csv(result_gig_write, here("data/psn_gig_200.csv"))
 ```
 
 ```{r}
 source("R/figure_gig.R")
 (fig_gig <- make_fig_gig(result_gig) +
   labs(subtitle = "自営業者"))
-save_fig_gig("gig_200.png", fig_gig)
+save_fig_gig("psn_gig_200.png", fig_gig)
 ```
 
-### 年収200万円の給与所得者の場合
+### 給与所得者の場合
+
+- 埼玉県さいたま市在住の40歳単身世帯をモデルとした。
+- 年金は厚生年金に、健康保険は都道府県の協会けんぽに加入しているものとする。
+- 所得税額の算出に際しては、定額減税は加えていない。
+- 消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。
 
 ```{r}
-salary200 <- person(200, saitama, "埼玉", TRUE, "emp", 1)
+psn_salary200 <- person(200, saitama, "埼玉", TRUE, FALSE, "emp", 1)
 source("R/figure_gig.R")
-result_salary200 <- calc_tax_and_prem(salary200)
+result_salary200 <- calc_tax_and_prem(psn_salary200)
 (fig_salary200 <- make_fig_gig(result_salary200) +
     labs(subtitle = "被用者"))
-save_fig_gig("salary200.png", fig_salary200)
+save_fig_gig("psn_salary200.png", fig_salary200)
 ```
 
+自営・被用者のグラフの比較図
+
 ```{r}
-(gig_salary <- fig_gig / fig_salary200 + 
+#| fig-height: 8
+(psn_gig_salary <- fig_gig / fig_salary200 + 
    patchwork::plot_annotation(
      caption = "（備考）括弧内は、年収に占める各費目の割合である。"
    ))
-save_fig_gig("gig_salary.png", gig_salary, width = 200, height = 140)
-```
-
-
-
-## グラフ作成
-
-```{r}
-## 元データとなるpersonオブジェクトを、年収を変えて用意する
-pers <- person(seq(50, 1000, 1), saitama, "埼玉", TRUE, "emp", 1)
-i <- row_number(pers)
-result <- map(i, \(x) calc_tax_and_prem(slice(pers, x))) |> 
-  list_rbind() |> 
-  mutate(across(where(is.numeric), \(x) round(x, 3)))
-write_excel_csv(result, here("data/result/saitama_salary_emp.csv"))
-```
-
-```{r}
-make_bar <- function(persons_result) {
-  persons_result |> 
-    pivot_longer(c(`年金`, `健康保険`, `住民税`, `所得税`)) |> 
-    mutate(name = fct_inorder(name)) |> 
-    ggplot(aes(`年収`, value, fill = name)) +
-    geom_area() +
-    labs(
-      x = "年収",
-      y = "金額",
-      fill = NULL
-    ) +
-    cols4all::scale_fill_discrete_c4a_cat()
-}
-
-make_bar(result) + ggtitle("さいたま市, 被用者, 厚生年金加入")
-```
-
-
-
-```{r}
-get_income_data <- function(income_earned_vec, city, nat_or_emp) {
-  tibble(
-    income_earned = income_earned_vec,
-    
-    taxable_incometax = map(
-      income_earned_vec, 
-      \(x) get_taxable(x, 1, city, nat_or_emp, "income")
-      ),
-    
-    taxable_residtax = map(
-      income_earned_vec, 
-      \(x) get_taxable(x, 1, city, nat_or_emp, "resid")
-      )
-    ) |> 
-    mutate(across(where(is.list), \(x) list_simplify(x)))
-}
-```
-
-国民年金加入者の場合のデータ:
-
-```{r}
-data_nat <- get_income_data(1:500, saitama, "nat")
-```
-
-厚生年金加入者の場合のデータ:
-
-```{r make_income_emp}
-make_income_emp <- function(maximum, city = saitama) {
-  vec_1to105 <- seq(1, 105)
-  vec_106 <- seq(106, maximum)
-  before <- get_income_data(vec_1to105, city, "emp") # 105万円以下を国民年金にする場合は、ここを"nat"に
-  after <- get_income_data(vec_106, city, "emp")
-  
-  bind_rows(before, after)
-}
-
-data_emp <- make_income_emp(400)
-```
-
-税・社会保険料を計算したテーブルを作る。
-
-```{r get_result}
-get_result <- function(df, city_table = saitama, num = 1, is_salary, nat_or_emp) {
-  result <- df |> 
-    mutate(
-      pension_nat = map(income_earned, \(x) calc_pension_nat(x)),
-      pension_emp = map(income_earned, \(x) calc_pension_emp(x)),
-      insurance = map(income_earned, \(x) calc_kokuho(x, num, city_table, is_salary)),
-      income_tax = map(taxable_incometax, \(x) calc_tax_income(x, num)),
-      resident_tax = map(taxable_residtax, \(x) calc_tax_resident(x, 0.1, num)),
-      vat = map(income_earned, \(x) calc_vat(x, num, city_table, nat_or_emp))
-      ) |> 
-      mutate(across(where(is.list), \(x) list_simplify(x)))
-
-  ## 厚生年金の場合、106万円未満は国民年金に加入しているものとするかどうか
-  if (nat_or_emp == "emp") {
-    result <- result |> 
-      mutate(pension = case_when(
-        # income_earned < 106 ~ pension_nat, # 106未満で国民年金ならこちら
-        income_earned < 106 ~ pension_emp,
-        income_earned >= 106 ~ pension_emp
-        )
-      )
-  } else if (nat_or_emp == "nat") {
-    result <- result |> 
-      mutate(pension = pension_nat)
-  }
-  
-  ## 消費税額の列を加えるため
-  vat_rate <- 0.1
-  
-  result |> 
-    select(income_earned, pension, insurance, income_tax, resident_tax) |> 
-    mutate(
-      vat = (income_earned - (pension + insurance + income_tax + resident_tax)) * vat_rate,
-      vat = case_when(vat < 0 ~ 0, .default = vat) # 消費税額が負になるのを防ぐ
-      ) |> 
-    pivot_longer(cols = -income_earned) |> 
-    mutate(name = fct_inorder(name)) 
-}
-
-## 社会保険料額、社会保険料総額、所得・住民税総額、消費税含む総額のデータフレームを作成
-get_sum_tab <- function(df) {
-  df |> 
-    pivot_wider() |> 
-    transmute(
-      income_earned,
-      pension, 
-      plus_i = pension + insurance, 
-      plus_tax = plus_i + income_tax + resident_tax,
-      plus_VAT = plus_tax + vat
-    ) |> 
-    pivot_longer(-income_earned) |> 
-    mutate(name = factor(name, levels = c(
-      "plus_VAT",
-      "plus_tax",
-      "plus_i",
-      "pension"
-      )
-    )
-  )
-}
-
-## 各種の税・社会保険料がincome_earnedに占める割合をDFで返す関数
-get_rate_tab <- function(df) {
-  df |> 
-    pivot_wider() |> 
-    ## それぞれが所得に占める割合
-    transmute(
-      income_earned,
-      rate_pension = pension / income_earned,
-      rate_insurance = insurance / income_earned,
-      rate_income_tax = income_tax / income_earned,
-      rate_resident = resident_tax / income_earned,
-      rate_vat = vat / income_earned,
-      rate_total = (pension + insurance + income_tax + resident_tax + vat) / income_earned
-    ) |> 
-    pivot_longer(-income_earned) |> 
-    mutate(value = round(value * 100, 4)) # percentにする
-}
-```
-
-```{r}
-## Earned incomeと税額の関係を表したdataframe
-case_nat <- get_result(data_nat, saitama, 1, "nat")
-case_nat_sum <- get_sum_tab(case_nat)
-case_nat_rate <- get_rate_tab(case_nat)
-
-case_emp <- get_result(data_emp, saitama, 1, "emp")
-case_emp_sum <- get_sum_tab(case_emp)
-case_emp_rate <- get_rate_tab(case_emp)
-#levels(case_emp_sum$name)
-```
-
-図の作成
-
-```{r make_chart}
-make_chart_area <- function(df, income_earned_min, income_earned_max) {
-  df |> 
-    filter(income_earned >= income_earned_min, income_earned <= income_earned_max) |> 
-    ggplot(aes(income_earned, value, fill = name)) +
-    geom_area() +
-    geom_hline(yintercept = 0, linewidth = 0.2) +
-    cols4all::scale_fill_discrete_c4a_cat() +
-    labs(
-      title = "収入水準別の、税・保険料の額の変化",
-      x = "Earned income",
-      y = "税・保険料額",
-      fill = NULL,
-      caption = "備考: 埼玉県さいたま市の例を用いた。"
-    )
-}
-
-linetypes <- function(n) {
-  types <- c("solid", "111115", "5152", "75", "33")
-  return(types[seq_len(n)])
-}
-
-
-make_chart_line <- function(df, income_earned_min, income_earned_max, by = 50) {
-  mylab <- c(
-    "plus_VAT" = TeX("個人負担（社保＋所得・住民税＋\\textbf{消費税}）"),
-    "plus_tax" = TeX("社保＋\\textbf{所得•住民税}"),
-    "plus_i"   = TeX("社会保険料負担（年金＋\\textbf{国保}）"),
-    "pension"  = TeX("\\textbf{年金}")
-    )
-  w <- 0.7 # 折れ線の基本の太さ
-  
-  df |> 
-    filter(income_earned >= income_earned_min, income_earned <= income_earned_max) |> 
-    ggplot(aes(income_earned, value, colour = name, lty = name, linewidth = name)) +
-    geom_line() +
-    #cols4all::scale_color_discrete_c4a_cat(palette = "carto.safe") +
-    scale_x_continuous(breaks = c(88, seq(100, income_earned_max, by))) +
-    scale_colour_manual(
-      values = c(
-        # https://carto.com/carto-colors/
-        "plus_VAT" = "#88CCEE",
-        "plus_tax" = "#CC6677",
-        "plus_i" = "grey30",
-        "pension" = "#117733"
-        ),
-      labels = mylab
-      ) +
-    scale_linetype_manual(
-      #values = linetypes(5)
-      values = c(
-        "plus_VAT" = "solid",
-        "plus_tax" = "dotdash",
-        "plus_i" = "solid", 
-        "pension" = "dashed" 
-      ),
-      labels = mylab
-    ) +
-    scale_linewidth_manual(
-      values = c(
-        "plus_VAT" = w + 1,
-        "plus_tax" = w,
-        "plus_i" = w, 
-        "pension" = w 
-      ),
-      labels = mylab
-    ) +
-    ylim(0, NA) +
-    labs(
-      title = "税・保険料額の変化",
-      y = "税・保険料額",
-      colour = NULL,
-      lty = NULL,
-      linewidth = NULL
-    ) +
-    theme(
-      legend.position = "bottom"
-    ) +
-    guides(color = guide_legend(nrow = 2))
-}
-
-add_vline_income <- function(income) {
-  # 最後に作成されたプロットを取得
-  p <- last_plot()
-
-  data_income <- p$data |> 
-    filter(income_earned == income)
-  income_point <- data_income$value |> round(1)
-  
-  list(
-    geom_vline(
-      xintercept = income,
-      linewidth = 0.3,
-      colour = "grey40"
-      ),
-    annotate(
-      geom = "point",
-      x = income,
-      y = income_point,
-      label = income_point
-    )
-  )
-}
-```
-
-### 国保加入者
-
-```{r}
-fig_saitama_nat <- case_nat |> 
-  make_chart_area(88, 3e2) +
-  geom_vline(xintercept = 103, linewidth = 0.2) +
-  labs(
-    subtitle = "単身世帯の自営業者（国民年金加入者）を想定したケース.\n縦線は103万円",
-    y = "所得"
-  )
-fig_saitama_nat
-```
-
-```{r}
-save_figure(here("figure/saitama_nat.png"), fig_saitama_nat)
-```
-
-国保・限界的な追加分の図
-
-```{r}
-get_saitama_nat_line <- function(df = case_nat_sum, income, maximum = 300, by) {
-  d <- filter(df, income_earned == income)
-  d <- round(d$value, 1)
-  df |> 
-    make_chart_line(88, maximum, by) +
-    add_vline_income(income) +
-    annotate(
-      geom = "text",
-      x = income - 3,
-      y = d + max(d) * 0.05,
-      label = d,
-      hjust = 1
-    ) +
-    labs(
-      x = "所得",
-      subtitle = "単身世帯の自営業者（国民年金加入者）を想定したケース",
-      caption = "備考：埼玉県さいたま市の例を用いた。\n* 単身の自営業者の住民税課税最低限である88万円を、所得を示す横軸の左端としている。\nただし所得がこの額未満であっても、免除申請をしないならば、国民健康保険料や国民年金保険料はかかる。\n** ここでは経費は0であると仮定している。"
-    )
-}
-
-fig_saitama_nat_line <- get_saitama_nat_line(case_nat_sum, 200, 300, 50)
-fig_saitama_nat_line
-```
-
-```{r}
-save_figure(here("figure/saitama_nat_line.png"), fig_saitama_nat_line,
-            height = 145, width = 200)
-```
-
-#### income_earned に占める各種税の割合
-
-```{r get_fig_rate}
-get_fig_rate <- function(df, minimum, maximum) {
-  df |> 
-    filter(
-      income_earned >= minimum,
-      income_earned <= maximum,
-      name == "rate_total"
-      ) |> 
-    ggplot(aes(income_earned, value)) +
-    geom_line() +
-    labs(
-      y = "percent"
-    )
-}
-```
-
-```{r}
-fig_saitama_nat_rate <- get_fig_rate(case_nat_rate, 88, 300) +
-  labs(
-    title = "個人負担が所得に占める割合",
-    subtitle = "自営業者の場合",
-    x = "所得"
-  )
-fig_saitama_nat_rate
-```
-
-```{r}
-save_figure(here("figure/saitama_nat_rate.png"), fig_saitama_nat_rate)
-```
-
-
-### 厚生年金加入者
-
-```{r}
-#levels_emp <- c("pension_emp", "insurance", "income_tax", "resident_tax")
-fig_saitama_emp <- case_emp |> 
-  make_chart_area(88, 300) +
-  #geom_vline(xintercept = c(106)) +
-  labs(
-    x = "賃金",
-    subtitle = "単身世帯の被雇用者（厚生年金加入者）を想定したケース."
-    #caption = "備考:\n* 埼玉県さいたま市の例を用いた。\n** 収入の左端については、単身の自営業者の住民税課税最低限である88万円とした。\nただし所得がこの額未満であっても、国民健康保険料や国民年金保険料はかかる（免除申請をしないならば）。"
-  )
-fig_saitama_emp
-```
-
-```{r}
-save_figure(here("figure/saitama_emp.png"), fig_saitama_emp)
-```
-
-厚生・限界的な追加分の図
-
-```{r}
-get_saitama_emp_line <- function(df, income, maximum = 300, by) {
-  d <- filter(df, income_earned == income)
-  d <- round(d$value, 1)
-  df |> 
-    make_chart_line(198, maximum, by) + # 厚生年金加入者の住民税課税ライン
-    add_vline_income(income) +
-    annotate(
-      geom = "text",
-      x = income - 3,
-      y = d,
-      label = d,
-      hjust = 1
-      ) +
-    labs(
-      x = "賃金",
-      subtitle = "単身世帯の被雇用者（厚生年金加入者）のケース",
-      caption = "備考：埼玉県さいたま市の例を用いた。\n* 単身の被雇用者の住民税課税最低限である198万円を、賃金を示す横軸の左端としている。\nただし所得がこの額未満であっても、免除申請をしないならば、国民健康保険料や国民年金保険料はかかる。"
-    )
-  }
-
-fig_saitama_emp_line <- get_saitama_emp_line(case_emp_sum, 200, 300, 25)
-fig_saitama_emp_line
-```
-
-```{r}
-save_figure(here("figure/saitama_emp_line.png"), fig_saitama_emp_line, 
-            height = 140, width = 200)
-```
-
-#### income_earned に占める各種税の割合
-
-```{r}
-fig_saitama_emp_rate <- get_fig_rate(case_emp_rate, 198, 300) +
-  labs(
-    title = "個人負担が所得に占める割合",
-    subtitle = "被用者の場合",
-    x = "賃金"
-  )
-fig_saitama_emp_rate
-```
-
-```{r}
-save_figure(here("figure/saitama_emp_rate.png"), fig_saitama_emp_rate)
-```
-
-
-## 表
-
-```{r}
-get_result_table <- function(df) {
-  df |> 
-    pivot_wider() |> 
-    filter(income_earned %in% seq(100, 300, 50)) |> 
-    mutate(
-      Total = round(pension + insurance + income_tax + resident_tax + vat, 1),
-    ) |> 
-    tt()
-}
-```
-
-```{r}
-table_nat <- get_result_table(case_nat)
-table_nat
-```
-
-```{r}
-table_emp <- get_result_table(case_emp)
-table_emp
-```
-
-```{r}
-tinytable::save_tt(table_nat, here("figure/result_self_employed.html"), overwrite = TRUE)
-tinytable::save_tt(table_emp, here("figure/result_employed.html"), overwrite = TRUE)
+save_fig_gig("psn_gig_salary.png", psn_gig_salary, width = 200, height = 140)
 ```
 
 
