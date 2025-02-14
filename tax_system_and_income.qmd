@@ -37,8 +37,12 @@ theme_set(
   theme(
     plot.background = NULL,
     plot.title = element_text(family = FONT, face = "bold"),
-    plot.caption = element_text(hjust = 0))
+    plot.caption = element_text(
+      hjust = 0, size = 8, lineheight = 1.2,
+      margin = margin(t = 10, b = 1),
+      )
     )
+  )
 source(here("R/save_figure.R"))
 ```
 
@@ -329,7 +333,7 @@ calc_kenpo(psn_employed)
 
 ## 控除
 
-### 青色申告控除
+### 青色・白色申告控除
 
 国税庁「[青色申告特別控除](https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2072.htm)」
 
@@ -723,10 +727,14 @@ calc_tax_and_prem <- function(person) {
 
 ### 自営業者の場合
 
-- 埼玉県さいたま市在住の40歳単身世帯をモデルとした。
-- 年金は国民年金に、健康保険は国民健康保険に加入しているものとする。
-- 所得税額の算出に際しては、定額減税は加えていない。
-- 消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。
+埼玉県さいたま市在住の40歳単身世帯をモデルとした。
+年金は国民年金に、健康保険は国民健康保険に加入しているものとする。
+所得税額の算出に際しては、定額減税は加えていない。
+消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。
+
+青色申告者 (`psn_gig`) と白色申告者 (`psn_gig_white`) の2つを考える。
+
+#### 青色申告者の場合：
 
 ```{r}
 result_gig <- calc_tax_and_prem(psn_gig)
@@ -742,8 +750,29 @@ write_excel_csv(result_gig_write, here("data/psn_gig_200.csv"))
 ```{r}
 source("R/figure_gig.R")
 (fig_gig <- make_fig_gig(result_gig) +
-  labs(subtitle = "自営業者"))
+  labs(
+    subtitle = "自営業者 (青色申告)",
+    caption = str_wrap("(備考) 2024年時点の、埼玉県さいたま市在住の40歳単身世帯をモデルとした。年金は国民年金に、健康保険は国民健康保険に加入しているものとする。所得税額の算出に際しては、定額減税は加えていない。消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。各項目の括弧内は、年収に占める金額の割合である。", width = 100, whitespace_only = FALSE)
+    )
+  )
 save_fig_gig("psn_gig_200.png", fig_gig)
+```
+
+#### 白色申告者の場合：
+
+```{r}
+## 白色申告者
+psn_gig_white <- person(
+  200, saitama, "埼玉", FALSE, FALSE, "nat", 1
+  )
+
+fig_gig_white <- calc_tax_and_prem(psn_gig_white) |> 
+  make_fig_gig() +
+  labs(
+    subtitle = "自営業者 (白色申告)",
+    caption = str_wrap("(備考) 2024年時点の、埼玉県さいたま市在住の40歳単身世帯をモデルとした。年金は国民年金に、健康保険は国民健康保険に加入しているものとする。所得税額の算出に際しては、定額減税は加えていない。消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。各項目の括弧内は、年収に占める金額の割合である。", width = 100, whitespace_only = FALSE)
+    )
+save_fig_gig("psn_gig_200_white.png", fig_gig_white)
 ```
 
 ### 給与所得者の場合
@@ -758,8 +787,12 @@ psn_salary200 <- person(200, saitama, "埼玉", TRUE, FALSE, "emp", 1)
 source("R/figure_gig.R")
 result_salary200 <- calc_tax_and_prem(psn_salary200)
 (fig_salary200 <- make_fig_gig(result_salary200) +
-    labs(subtitle = "被用者"))
-save_fig_gig("psn_salary200.png", fig_salary200)
+    labs(
+      subtitle = "被用者",
+      caption = str_wrap("(備考) 2024年時点の、埼玉県さいたま市在住の40歳単身世帯をモデルとした。年金は厚生年金に、健康保険は都道府県の協会けんぽに加入しているものとする。ここに表示した負担額は、健康保険料・年金保険料ともに、企業折半分も含む全額である。所得税額の算出に際しては、定額減税は加えていない。消費税額は、年収から所得税・住民税・社会保険料負担を差し引いた全額を消費すると仮定し、税率10％を乗じて算出した。各項目の括弧内は、年収に占める金額の割合である。", width = 100, whitespace_only = FALSE)
+      )
+  )
+save_fig_gig("psn_salary200.png", fig_salary200, height = 85)
 ```
 
 自営・被用者のグラフの比較図

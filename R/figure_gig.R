@@ -116,7 +116,7 @@ make_fig_gig <- function(df) {
   ## 普通に色分けだけのグラフなら楽なのだが・・・
 }
 
-save_fig_gig <- function(filename, plot, width = 180, height = 70) {
+save_fig_gig <- function(filename, plot, width = 180, height = 80) {
   ggsave(
     filename = filename,
     path = here("figure"),
